@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>교통안전 VR 운전 체험</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #ui-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1000;
+    }
+    .modal {
+      pointer-events: all;
+    }
+    #hud {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: 300px;
+      display: none;
+      pointer-events: all;
+    }
+    #brake-indicator {
+      position: absolute;
+      bottom: 50px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: none;
+      pointer-events: all;
+    }
+  </style>
+</head>
+<body>
+  <!-- UI Overlay -->
+  <div id="ui-overlay">
+    <!-- HUD -->
+    <div id="hud" class="card bg-dark text-white bg-opacity-75">
+      <div class="card-body">
+        <h5 class="card-title text-success fw-bold">🚸 어린이 보호구역 (제한 30km/h)</h5>
+        <p class="card-text mb-1">
+          🚙 차량 속도: <span id="speed-display" class="fw-bold">0</span> km/h
+        </p>
+        <p class="card-text mb-1 text-warning">
+          🏃 어린이 속도: 3.5 m/s (12.6 km/h)
+        </p>
+        <p id="obstacle-distance-hud" class="card-text mb-0 fw-bold" style="display: none;">
+          ⚠️ 앞범퍼⇔어린이: <span id="obstacle-distance-display">-</span> m
+        </p>
+        <p class="card-text mt-2 mb-0 text-light opacity-75">
+          주행 거리: <span id="distance-display">0</span> m
+        </p>
+      </div>
+    </div>
+
+    <!-- 브레이크 표시 -->
+    <div id="brake-indicator" class="alert alert-danger fs-4 fw-bold">🛑 브레이크!</div>
+  </div>
+
+  <!-- 시작 화면 Modal -->
+  <div class="modal fade" id="start-screen" tabindex="-1" aria-labelledby="startScreenLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content text-center">
+        <div class="modal-header">
+          <h1 class="modal-title w-100 fs-4" id="startScreenLabel">🚗 교통안전 운전 체험 🚗</h1>
+        </div>
+        <div class="modal-body">
+          <p class="fs-5">안녕하세요, 어린이 여러분!</p>
+          <p>🏃 인도에서 갑자기 뛰어나오는 어린이를 조심하세요!</p>
+          <p class="text-danger fw-bold">
+            🚙 도로 양쪽에 불법주정차 차량이 있어 시야가 가려져 있어요!
+          </p>
+          <div class="mb-3 text-start">
+            <label for="player-name" class="form-label fw-semibold">이름을 입력하고 시작해요</label>
+            <input type="text" id="player-name" class="form-control" placeholder="예) 김안전" maxlength="12">
+          </div>
+          <hr>
+          <p>🛑 <strong>스페이스바</strong> (PC) 또는 <strong>화면 탭</strong> (모바일/VR)으로 브레이크를 밟으세요</p>
+          <p>⏱️ 반응 속도와 정지 거리를 측정합니다</p>
+          <div class="alert alert-info mt-3">
+            💡 VR 헤드셋을 사용하면 더 실감나는 체험이 가능합니다!<br>
+            좌우를 둘러보면서 주변을 잘 살펴보세요!
+          </div>
+        </div>
+        <div class="modal-footer justify-content-center">
+          <button type="button" id="start-btn" class="btn btn-primary btn-lg">게임 시작! 🎯</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 결과 화면 Modal -->
+  <div class="modal fade" id="result-screen" tabindex="-1" aria-labelledby="resultScreenLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h1 class="modal-title w-100 text-center fs-4" id="resultScreenLabel">체험 결과</h1>
+        </div>
+        <div class="modal-body" id="result-content">
+          <!-- 결과 내용은 ui.js에서 동적으로 생성 -->
+        </div>
+        <div class="modal-footer justify-content-center">
+          <button type="button" id="restart-btn" class="btn btn-info btn-lg">다시 해보기 🔄</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- A-Frame Scene -->
+  <a-scene renderer="colorManagement: true; physicallyCorrectLights: true"
+           keyboard-shortcuts="enterVR: false">
+    <!-- 에셋 -->
+    <a-assets timeout="10000">
+      <!-- 도로 텍스처 -->
+      <img id="asphalt-color" src="assets/textures/Asphalt021_2K_Color.jpg" crossorigin="anonymous">
+      <img id="asphalt-normal" src="assets/textures/Asphalt021_2K_NormalGL.jpg" crossorigin="anonymous">
+      <img id="asphalt-roughness" src="assets/textures/Asphalt021_2K_Roughness.jpg" crossorigin="anonymous">
+
+      <!-- 차량 모델 -->
+      <a-asset-item id="car-model" src="assets/models/CarConcept.glb"></a-asset-item>
+
+      <a-mixin id="obstacle"
+               geometry="primitive: box; width: 0.8; height: 1.2; depth: 0.5"
+               material="color: #FFD93D">
+      </a-mixin>
+    </a-assets>
+
+    <!-- 카메라 (SUV 운전자 시점) -->
+    <a-entity id="camera-rig" position="0 1.8 0">
+      <!-- SUV는 일반 승용차보다 약 30cm 높음 (1.2m -> 1.8m) -->
+      <a-camera id="main-camera" position="0 0 0"
+                look-controls="enabled: true"
+                wasd-controls="enabled: true">
+        <!-- 운전대 -->
+        <a-entity position="0 -0.4 -0.7" rotation="50 0 0">
+          <!-- 외부 링 -->
+          <a-ring radius-inner="0.16" radius-outer="0.19" color="#1A1A1A" material="metalness: 0.3; roughness: 0.6"></a-ring>
+          <!-- 내부 링 -->
+          <a-ring radius-inner="0.12" radius-outer="0.16" color="#2A2A2A" material="roughness: 0.8"></a-ring>
+          <!-- 중앙 로고 영역 -->
+          <a-circle radius="0.06" color="#3A3A3A" material="metalness: 0.5; roughness: 0.4"></a-circle>
+          <!-- 스포크 (가로) -->
+          <a-box position="0 0 -0.01" width="0.24" height="0.03" depth="0.02" color="#2A2A2A"></a-box>
+          <!-- 스포크 (세로) -->
+          <a-box position="0 0 -0.01" width="0.03" height="0.24" depth="0.02" color="#2A2A2A"></a-box>
+        </a-entity>
+
+        <!-- 대시보드 -->
+        <a-entity position="0 -0.6 -0.9" rotation="-10 0 0">
+          <!-- 대시보드 메인 -->
+          <a-box position="0 0 0" width="1.5" height="0.3" depth="0.1" color="#1A1A1A" material="roughness: 0.6"></a-box>
+
+          <!-- 계기판 영역 -->
+          <a-entity position="0 0.05 0.06">
+            <!-- 속도계 배경 -->
+            <a-circle position="-0.25 0 0" radius="0.12" color="#0A0A0A"></a-circle>
+            <a-ring position="-0.25 0 0.001" radius-inner="0.11" radius-outer="0.12" color="#4CAF50" material="emissive: #4CAF50; emissiveIntensity: 0.3"></a-ring>
+
+            <!-- RPM 배경 -->
+            <a-circle position="0.25 0 0" radius="0.12" color="#0A0A0A"></a-circle>
+            <a-ring position="0.25 0 0.001" radius-inner="0.11" radius-outer="0.12" color="#2196F3" material="emissive: #2196F3; emissiveIntensity: 0.3"></a-ring>
+
+            <!-- 중앙 디스플레이 -->
+            <a-box position="0 0 0" width="0.25" height="0.15" depth="0.02" color="#1565C0" material="emissive: #1565C0; emissiveIntensity: 0.2"></a-box>
+          </a-entity>
+
+          <!-- 통풍구 (좌측) -->
+          <a-entity position="-0.6 0.05 0.06">
+            <a-circle radius="0.04" color="#0A0A0A"></a-circle>
+            <a-box position="0 0 0.01" width="0.04" height="0.001" depth="0.01" color="#2A2A2A"></a-box>
+            <a-box position="0 0.015 0.01" width="0.04" height="0.001" depth="0.01" color="#2A2A2A"></a-box>
+            <a-box position="0 -0.015 0.01" width="0.04" height="0.001" depth="0.01" color="#2A2A2A"></a-box>
+          </a-entity>
+
+          <!-- 통풍구 (우측) -->
+          <a-entity position="0.6 0.05 0.06">
+            <a-circle radius="0.04" color="#0A0A0A"></a-circle>
+            <a-box position="0 0 0.01" width="0.04" height="0.001" depth="0.01" color="#2A2A2A"></a-box>
+            <a-box position="0 0.015 0.01" width="0.04" height="0.001" depth="0.01" color="#2A2A2A"></a-box>
+            <a-box position="0 -0.015 0.01" width="0.04" height="0.001" depth="0.01" color="#2A2A2A"></a-box>
+          </a-entity>
+        </a-entity>
+
+        <!-- 센터 콘솔 -->
+        <a-entity position="0 -0.8 -0.3">
+          <!-- 기어 레버 영역 -->
+          <a-box position="0 0 0" width="0.3" height="0.15" depth="0.4" color="#1A1A1A" material="roughness: 0.7"></a-box>
+
+          <!-- 기어 레버 -->
+          <a-entity position="0 0.1 0">
+            <a-cylinder position="0 0 0" radius="0.02" height="0.15" color="#2A2A2A"></a-cylinder>
+            <a-sphere position="0 0.08 0" radius="0.035" color="#3A3A3A" material="metalness: 0.4; roughness: 0.5"></a-sphere>
+          </a-entity>
+
+          <!-- 버튼들 -->
+          <a-circle position="-0.08 0.08 0.21" radius="0.015" color="#FF5252" material="emissive: #FF5252; emissiveIntensity: 0.3"></a-circle>
+          <a-circle position="0 0.08 0.21" radius="0.015" color="#4CAF50" material="emissive: #4CAF50; emissiveIntensity: 0.3"></a-circle>
+          <a-circle position="0.08 0.08 0.21" radius="0.015" color="#2196F3" material="emissive: #2196F3; emissiveIntensity: 0.3"></a-circle>
+        </a-entity>
+
+        <!-- A-필러 (좌측) - 더 두껍고 현실적으로 -->
+        <a-box position="-0.7 0.3 -0.6"
+               width="0.15"
+               height="1.5"
+               depth="0.2"
+               color="#1A1A1A"
+               rotation="0 0 -12"
+               material="roughness: 0.5; metalness: 0.1">
+        </a-box>
+
+        <!-- A-필러 (우측) - 더 두껍고 현실적으로 -->
+        <a-box position="0.7 0.3 -0.6"
+               width="0.15"
+               height="1.5"
+               depth="0.2"
+               color="#1A1A1A"
+               rotation="0 0 12"
+               material="roughness: 0.5; metalness: 0.1">
+        </a-box>
+
+        <!-- B-필러 (좌측 뒷문 기둥) -->
+        <a-box position="-0.7 0 0.8"
+               width="0.15"
+               height="1.5"
+               depth="0.1"
+               color="#1A1A1A"
+               material="roughness: 0.5; metalness: 0.1">
+        </a-box>
+
+        <!-- B-필러 (우측 뒷문 기둥) -->
+        <a-box position="0.7 0 0.8"
+               width="0.15"
+               height="1.5"
+               depth="0.1"
+               color="#1A1A1A"
+               material="roughness: 0.5; metalness: 0.1">
+        </a-box>
+
+        <!-- 룸미러 -->
+        <a-entity position="0 0.45 -0.35">
+          <a-box position="0 0 0" width="0.25" height="0.08" depth="0.03" color="#0A0A0A" material="metalness: 0.8; roughness: 0.2"></a-box>
+          <a-box position="0 0 0.02" width="0.22" height="0.06" depth="0.01" color="#1A1A1A" material="opacity: 0.3; transparent: true; metalness: 0.9"></a-box>
+        </a-entity>
+
+        <!-- 와이퍼 받침대 (보닛 위) -->
+        <a-box position="-0.4 -0.7 -1.5"
+               width="0.03"
+               height="0.02"
+               depth="0.8"
+               color="#1A1A1A"
+               rotation="5 0 0">
+        </a-box>
+        <a-box position="0.4 -0.7 -1.5"
+               width="0.03"
+               height="0.02"
+               depth="0.8"
+               color="#1A1A1A"
+               rotation="5 0 0">
+        </a-box>
+
+        <!-- ========== 앞 유리창 (약간 투명한 틴팅) ========== -->
+        <a-plane position="0 0.3 -0.9"
+                 width="1.4"
+                 height="0.8"
+                 rotation="10 0 0"
+                 color="#808080"
+                 material="opacity: 0.1; transparent: true; side: double">
+        </a-plane>
+
+        <!-- ========== 천장 ========== -->
+        <a-plane position="0 0.85 0.2"
+                 width="1.5"
+                 height="2.5"
+                 rotation="90 0 0"
+                 color="#2A2A2A"
+                 material="roughness: 0.8; side: double">
+        </a-plane>
+
+        <!-- 천장 손잡이 (좌측) -->
+        <a-box position="-0.5 0.75 0.3"
+               width="0.15"
+               height="0.03"
+               depth="0.05"
+               color="#3A3A3A">
+        </a-box>
+
+        <!-- 천장 손잡이 (우측) -->
+        <a-box position="0.5 0.75 0.3"
+               width="0.15"
+               height="0.03"
+               depth="0.05"
+               color="#3A3A3A">
+        </a-box>
+
+        <!-- ========== 좌측 도어 패널 ========== -->
+        <a-plane position="-0.75 -0.2 0"
+                 width="1.8"
+                 height="1"
+                 rotation="0 90 0"
+                 color="#2A2A2A"
+                 material="roughness: 0.7">
+        </a-plane>
+
+        <!-- 좌측 창문 프레임 하단 -->
+        <a-box position="-0.73 0.3 0"
+               width="1.5"
+               height="0.08"
+               depth="0.03"
+               color="#1A1A1A">
+        </a-box>
+
+        <!-- 좌측 창문 (앞쪽) -->
+        <a-plane position="-0.74 0.5 -0.3"
+                 width="0.8"
+                 height="0.5"
+                 rotation="0 90 0"
+                 color="#4A90E2"
+                 material="opacity: 0.2; transparent: true; side: double">
+        </a-plane>
+
+        <!-- 좌측 창문 (뒤쪽) -->
+        <a-plane position="-0.74 0.4 0.6"
+                 width="0.8"
+                 height="0.6"
+                 rotation="0 90 0"
+                 color="#4A90E2"
+                 material="opacity: 0.2; transparent: true; side: double">
+        </a-plane>
+
+        <!-- 좌측 도어 팔걸이 -->
+        <a-box position="-0.72 -0.15 -0.1"
+               width="0.4"
+               height="0.08"
+               depth="0.03"
+               color="#3A3A3A">
+        </a-box>
+
+        <!-- 좌측 도어 손잡이 -->
+        <a-box position="-0.71 -0.1 0.1"
+               width="0.15"
+               height="0.04"
+               depth="0.02"
+               color="#555555"
+               material="metalness: 0.5">
+        </a-box>
+
+        <!-- ========== 우측 도어 패널 ========== -->
+        <a-plane position="0.75 -0.2 0"
+                 width="1.8"
+                 height="1"
+                 rotation="0 -90 0"
+                 color="#2A2A2A"
+                 material="roughness: 0.7">
+        </a-plane>
+
+        <!-- 우측 창문 프레임 하단 -->
+        <a-box position="0.73 0.3 0"
+               width="1.5"
+               height="0.08"
+               depth="0.03"
+               color="#1A1A1A">
+        </a-box>
+
+        <!-- 우측 창문 (앞쪽) -->
+        <a-plane position="0.74 0.5 -0.3"
+                 width="0.8"
+                 height="0.5"
+                 rotation="0 -90 0"
+                 color="#4A90E2"
+                 material="opacity: 0.2; transparent: true; side: double">
+        </a-plane>
+
+        <!-- 우측 창문 (뒤쪽) -->
+        <a-plane position="0.74 0.4 0.6"
+                 width="0.8"
+                 height="0.6"
+                 rotation="0 -90 0"
+                 color="#4A90E2"
+                 material="opacity: 0.2; transparent: true; side: double">
+        </a-plane>
+
+        <!-- 우측 도어 팔걸이 -->
+        <a-box position="0.72 -0.15 -0.1"
+               width="0.4"
+               height="0.08"
+               depth="0.03"
+               color="#3A3A3A">
+        </a-box>
+
+        <!-- 우측 도어 손잡이 -->
+        <a-box position="0.71 -0.1 0.1"
+               width="0.15"
+               height="0.04"
+               depth="0.02"
+               color="#555555"
+               material="metalness: 0.5">
+        </a-box>
+
+        <!-- ========== 뒷 유리창 ========== -->
+        <a-plane position="0 0.2 1.2"
+                 width="1.4"
+                 height="0.7"
+                 rotation="-10 0 0"
+                 color="#4A90E2"
+                 material="opacity: 0.15; transparent: true; side: double">
+        </a-plane>
+
+        <!-- 상단 프레임 (앞) -->
+        <a-box position="0 0.85 -0.9"
+               width="1.4"
+               height="0.05"
+               depth="0.05"
+               color="#1A1A1A">
+        </a-box>
+
+        <!-- 상단 프레임 (중앙) -->
+        <a-box position="0 0.85 0.2"
+               width="1.5"
+               height="0.05"
+               depth="0.05"
+               color="#1A1A1A">
+        </a-box>
+
+        <!-- 좌측 상단 프레임 (대각선) -->
+        <a-box position="-0.65 0.85 -0.3"
+               width="0.05"
+               height="0.05"
+               depth="1.2"
+               color="#1A1A1A">
+        </a-box>
+
+        <!-- 우측 상단 프레임 (대각선) -->
+        <a-box position="0.65 0.85 -0.3"
+               width="0.05"
+               height="0.05"
+               depth="1.2"
+               color="#1A1A1A">
+        </a-box>
+
+        <!-- 선바이저 (좌측) -->
+        <a-box position="-0.35 0.75 -0.6"
+               width="0.25"
+               height="0.02"
+               depth="0.3"
+               color="#2A2A2A"
+               rotation="10 0 0">
+        </a-box>
+
+        <!-- 선바이저 (우측) -->
+        <a-box position="0.35 0.75 -0.6"
+               width="0.25"
+               height="0.02"
+               depth="0.3"
+               color="#2A2A2A"
+               rotation="10 0 0">
+        </a-box>
+      </a-camera>
+    </a-entity>
+
+    <!-- 도로 환경 -->
+    <!-- 도로 본체 (아스팔트 질감) - 길이 확장 -->
+    <a-plane id="road"
+             position="0 0 -25"
+             rotation="-90 0 0"
+             width="6"
+             height="200"
+             material="src: #asphalt-color; 
+                       normalMap: #asphalt-normal; 
+                       roughnessMap: #asphalt-roughness; 
+                       repeat: 3 100; 
+                       roughness: 0.9; 
+                       metalness: 0.1;
+                       generateMipmaps: false;
+                       minFilter: linear">
+    </a-plane>
+
+    <!-- 중앙선 (점선) - 확장 -->
+    <a-box position="0 0.01 -5" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -10" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -15" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -20" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -25" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -30" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -35" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -40" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -45" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -50" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -55" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -60" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -65" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 -70" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+
+    <!-- 도로 가장자리선 (좌측) -->
+    <a-box position="-3 0.01 -25" width="0.1" height="0.02" depth="200" color="#FFFFFF"></a-box>
+
+    <!-- 도로 가장자리선 (우측) -->
+    <a-box position="3 0.01 -25" width="0.1" height="0.02" depth="200" color="#FFFFFF"></a-box>
+
+    <!-- 좌측 인도 (콘크리트 질감) -->
+    <a-plane position="-4 0.03 -25"
+             rotation="-90 0 0"
+             width="2"
+             height="200"
+             color="#B0B0B0"
+             material="roughness: 0.8">
+    </a-plane>
+
+    <!-- 우측 인도 (콘크리트 질감) -->
+    <a-plane position="4 0.03 -25"
+             rotation="-90 0 0"
+             width="2"
+             height="200"
+             color="#B0B0B0"
+             material="roughness: 0.8">
+    </a-plane>
+
+    <!-- 인도 블록 패턴 (좌측) -->
+    <a-box position="-3.5 0.04 -25" width="0.05" height="0.01" depth="200" color="#999999"></a-box>
+    <a-box position="-4.5 0.04 -25" width="0.05" height="0.01" depth="200" color="#999999"></a-box>
+
+    <!-- 인도 블록 패턴 (우측) -->
+    <a-box position="3.5 0.04 -25" width="0.05" height="0.01" depth="200" color="#999999"></a-box>
+    <a-box position="4.5 0.04 -25" width="0.05" height="0.01" depth="200" color="#999999"></a-box>
+
+    <!-- 주차 차량은 game.js에서 동적으로 생성됩니다. -->
+
+    <!-- ========== 건물들 (좌측) - 더 디테일하게 ========== -->
+    <!-- 상가건물 1 -->
+    <a-entity position="-6.5 0 -10">
+      <a-box position="0 2.5 0" width="3" height="5" depth="5" color="#D7CCC8" material="roughness: 0.8"></a-box>
+      <!-- 간판 -->
+      <a-box position="1.6 3.5 0" width="0.1" height="1" depth="3" color="#E53935" material="emissive: #E53935; emissiveIntensity: 0.2"></a-box>
+      <!-- 창문들 -->
+      <a-box position="1.45 3.5 -1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 3.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 3.5 1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 1.5 -1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 1.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 1.5 1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 상가건물 2 -->
+    <a-entity position="-6.5 0 -20">
+      <a-box position="0 3 0" width="3" height="6" depth="4" color="#BCAAA4" material="roughness: 0.8"></a-box>
+      <!-- 간판 -->
+      <a-box position="1.6 4 0" width="0.1" height="0.8" depth="2.5" color="#FF9800" material="emissive: #FF9800; emissiveIntensity: 0.3"></a-box>
+      <!-- 창문들 -->
+      <a-box position="1.45 2 0" width="0.05" height="1.2" depth="1.5" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 아파트 -->
+    <a-entity position="-7 0 -32">
+      <a-box position="0 4 0" width="4" height="8" depth="6" color="#8D6E63" material="roughness: 0.7"></a-box>
+      <!-- 베란다 -->
+      <a-box position="2.05 5 0" width="0.1" height="1.5" depth="5" color="#BDBDBD" material="opacity: 0.3; transparent: true"></a-box>
+      <a-box position="2.05 3 0" width="0.1" height="1.5" depth="5" color="#BDBDBD" material="opacity: 0.3; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 상가건물 3 (좌측) -->
+    <a-entity position="-6.5 0 -45">
+      <a-box position="0 2.5 0" width="3" height="5" depth="5" color="#A1887F" material="roughness: 0.8"></a-box>
+      <!-- 간판 -->
+      <a-box position="1.6 3.5 0" width="0.1" height="1" depth="3" color="#00BCD4" material="emissive: #00BCD4; emissiveIntensity: 0.2"></a-box>
+      <!-- 창문들 -->
+      <a-box position="1.45 3.5 -1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 3.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 3.5 1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 1.5 -1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 1.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 1.5 1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 상가건물 4 (좌측) -->
+    <a-entity position="-6.5 0 -60">
+      <a-box position="0 3 0" width="3" height="6" depth="4" color="#D7CCC8" material="roughness: 0.8"></a-box>
+      <!-- 간판 -->
+      <a-box position="1.6 4 0" width="0.1" height="0.8" depth="2.5" color="#9C27B0" material="emissive: #9C27B0; emissiveIntensity: 0.3"></a-box>
+      <!-- 창문들 -->
+      <a-box position="1.45 2 0" width="0.05" height="1.2" depth="1.5" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 아파트 2 (좌측) -->
+    <a-entity position="-7 0 -75">
+      <a-box position="0 4 0" width="4" height="8" depth="6" color="#6D4C41" material="roughness: 0.7"></a-box>
+      <!-- 베란다 -->
+      <a-box position="2.05 5 0" width="0.1" height="1.5" depth="5" color="#BDBDBD" material="opacity: 0.3; transparent: true"></a-box>
+      <a-box position="2.05 3 0" width="0.1" height="1.5" depth="5" color="#BDBDBD" material="opacity: 0.3; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 상가건물 5 (좌측) -->
+    <a-entity position="-6.5 0 -90">
+      <a-box position="0 2.5 0" width="3" height="5" depth="5" color="#BCAAA4" material="roughness: 0.8"></a-box>
+      <!-- 간판 -->
+      <a-box position="1.6 3.5 0" width="0.1" height="1" depth="3" color="#FF5722" material="emissive: #FF5722; emissiveIntensity: 0.2"></a-box>
+      <!-- 창문들 -->
+      <a-box position="1.45 3.5 -1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 3.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="1.45 1.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 상가건물 6 (좌측) -->
+    <a-entity position="-6.5 0 -105">
+      <a-box position="0 3 0" width="3" height="6" depth="4" color="#A1887F" material="roughness: 0.8"></a-box>
+      <!-- 간판 -->
+      <a-box position="1.6 4 0" width="0.1" height="0.8" depth="2.5" color="#FFC107" material="emissive: #FFC107; emissiveIntensity: 0.3"></a-box>
+      <!-- 창문들 -->
+      <a-box position="1.45 2 0" width="0.05" height="1.2" depth="1.5" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 아파트 3 (좌측) -->
+    <a-entity position="-7 0 -120">
+      <a-box position="0 4 0" width="4" height="8" depth="6" color="#795548" material="roughness: 0.7"></a-box>
+      <!-- 베란다 -->
+      <a-box position="2.05 5 0" width="0.1" height="1.5" depth="5" color="#BDBDBD" material="opacity: 0.3; transparent: true"></a-box>
+      <a-box position="2.05 3 0" width="0.1" height="1.5" depth="5" color="#BDBDBD" material="opacity: 0.3; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- ========== 건물들 (우측) ========== -->
+    <!-- 편의점 -->
+    <a-entity position="6.5 0 -15">
+      <a-box position="0 2 0" width="3" height="4" depth="5" color="#4CAF50" material="roughness: 0.6"></a-box>
+      <!-- 간판 -->
+      <a-box position="-1.6 3 0" width="0.15" height="1.5" depth="4" color="#8BC34A" material="emissive: #8BC34A; emissiveIntensity: 0.4"></a-box>
+      <a-text value="24" position="-1.65 3 0" align="center" color="#FFFFFF" width="8" rotation="0 -90 0"></a-text>
+      <!-- 유리문 -->
+      <a-box position="-1.45 1 0" width="0.05" height="2" depth="1.2" color="#B3E5FC" material="opacity: 0.5; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 빌딩 -->
+    <a-entity position="6.5 0 -25">
+      <a-box position="0 3.5 0" width="3.5" height="7" depth="4" color="#607D8B" material="roughness: 0.5; metalness: 0.3"></a-box>
+      <!-- 창문 패턴 -->
+      <a-box position="-1.8 5 -1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 5 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 5 1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 -1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 편의점 2 (우측) -->
+    <a-entity position="6.5 0 -40">
+      <a-box position="0 2 0" width="3" height="4" depth="5" color="#FF9800" material="roughness: 0.6"></a-box>
+      <!-- 간판 -->
+      <a-box position="-1.6 3 0" width="0.15" height="1.5" depth="4" color="#FFB74D" material="emissive: #FFB74D; emissiveIntensity: 0.4"></a-box>
+      <!-- 유리문 -->
+      <a-box position="-1.45 1 0" width="0.05" height="2" depth="1.2" color="#B3E5FC" material="opacity: 0.5; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 빌딩 2 (우측) -->
+    <a-entity position="6.5 0 -55">
+      <a-box position="0 3.5 0" width="3.5" height="7" depth="4" color="#455A64" material="roughness: 0.5; metalness: 0.3"></a-box>
+      <!-- 창문 패턴 -->
+      <a-box position="-1.8 5 -1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 5 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 5 1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 -1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 상가건물 (우측) -->
+    <a-entity position="6.5 0 -70">
+      <a-box position="0 2.5 0" width="3" height="5" depth="5" color="#9E9D24" material="roughness: 0.8"></a-box>
+      <!-- 간판 -->
+      <a-box position="-1.6 3.5 0" width="0.1" height="1" depth="3" color="#FFEB3B" material="emissive: #FFEB3B; emissiveIntensity: 0.2"></a-box>
+      <!-- 창문들 -->
+      <a-box position="-1.45 3.5 -1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="-1.45 3.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="-1.45 1.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 빌딩 3 (우측) -->
+    <a-entity position="6.5 0 -85">
+      <a-box position="0 3.5 0" width="3.5" height="7" depth="4" color="#546E7A" material="roughness: 0.5; metalness: 0.3"></a-box>
+      <!-- 창문 패턴 -->
+      <a-box position="-1.8 5 -1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 5 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 -1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 상가건물 2 (우측) -->
+    <a-entity position="6.5 0 -100">
+      <a-box position="0 2.5 0" width="3" height="5" depth="5" color="#5D4037" material="roughness: 0.8"></a-box>
+      <!-- 간판 -->
+      <a-box position="-1.6 3.5 0" width="0.1" height="1" depth="3" color="#8D6E63" material="emissive: #8D6E63; emissiveIntensity: 0.2"></a-box>
+      <!-- 창문들 -->
+      <a-box position="-1.45 3.5 -1" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="-1.45 3.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+      <a-box position="-1.45 1.5 0" width="0.05" height="0.8" depth="0.8" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- 빌딩 4 (우측) -->
+    <a-entity position="6.5 0 -115">
+      <a-box position="0 3.5 0" width="3.5" height="7" depth="4" color="#37474F" material="roughness: 0.5; metalness: 0.3"></a-box>
+      <!-- 창문 패턴 -->
+      <a-box position="-1.8 5 -1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 5 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 -1" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+      <a-box position="-1.8 3 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+    </a-entity>
+
+    <!-- ========== 나무들 ========== -->
+    <a-cylinder position="-4.5 0.5 -12" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 -12" radius="0.6" color="#388E3C" material="roughness: 0.9"></a-sphere>
+    <a-sphere position="-4.3 1.4 -12.2" radius="0.4" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="4.5 0.5 -11" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="4.5 1.3 -11" radius="0.6" color="#388E3C" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="-4.5 0.5 -35" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 -35" radius="0.6" color="#66BB6A" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="4.5 0.5 -38" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="4.5 1.3 -38" radius="0.6" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="-4.5 0.5 -52" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 -52" radius="0.6" color="#388E3C" material="roughness: 0.9"></a-sphere>
+    <a-sphere position="-4.3 1.4 -52.2" radius="0.4" color="#66BB6A" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="4.5 0.5 -58" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="4.5 1.3 -58" radius="0.6" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="-4.5 0.5 -68" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 -68" radius="0.6" color="#66BB6A" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="4.5 0.5 -78" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="4.5 1.3 -78" radius="0.6" color="#388E3C" material="roughness: 0.9"></a-sphere>
+    <a-sphere position="4.3 1.4 -78.2" radius="0.4" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="-4.5 0.5 -88" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 -88" radius="0.6" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="4.5 0.5 -98" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="4.5 1.3 -98" radius="0.6" color="#66BB6A" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="-4.5 0.5 -108" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 -108" radius="0.6" color="#388E3C" material="roughness: 0.9"></a-sphere>
+    <a-sphere position="-4.3 1.4 -108.2" radius="0.4" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="4.5 0.5 -118" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="4.5 1.3 -118" radius="0.6" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <!-- ========== 가로등 (더 리얼하게) ========== -->
+    <a-entity position="-3 0 -8">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <a-entity position="3 0 -22">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <a-entity position="-3 0 -48">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <a-entity position="3 0 -62">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <a-entity position="-3 0 -82">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <a-entity position="3 0 -102">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <a-entity position="-3 0 -120">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <!-- ========== 추가 환경 요소 ========== -->
+    <!-- 쓰레기통 -->
+    <a-cylinder position="-4.2 0.4 -16" radius="0.25" height="0.8" color="#757575"></a-cylinder>
+    <a-cylinder position="4.2 0.4 -23" radius="0.25" height="0.8" color="#757575"></a-cylinder>
+
+    <!-- 전봇대 -->
+    <a-cylinder position="-4.8 2.5 -25" radius="0.12" height="5" color="#3E2723"></a-cylinder>
+    <a-box position="-4.8 5.3 0" width="0.3" height="0.1" depth="1.5" color="#424242"></a-box>
+
+    <!-- ========== 어린이 보호구역 표지판 ========== -->
+    <!-- 표지판 (좌측 입구) -->
+    <a-entity position="-4.5 1.5 -5">
+      <!-- 기둥 -->
+      <a-cylinder position="0 -0.75 0" radius="0.05" height="1.5" color="#757575"></a-cylinder>
+      <!-- 표지판 판넬 -->
+      <a-box position="0 0 0" width="0.8" height="1" depth="0.05" color="#4CAF50" material="emissive: #4CAF50; emissiveIntensity: 0.2"></a-box>
+      <!-- 어린이 그림 영역 (흰색) -->
+      <a-circle position="0 0.25 0.03" radius="0.25" color="#FFFFFF"></a-circle>
+      <!-- 어린이 아이콘 (간단하게) -->
+      <a-sphere position="0 0.35 0.04" radius="0.08" color="#FF6B6B"></a-sphere>
+      <a-box position="0 0.2 0.04" width="0.1" height="0.15" depth="0.05" color="#1565C0"></a-box>
+      <!-- 텍스트 -->
+      <a-text value="어린이
+보호구역" position="0 -0.3 0.03" align="center" color="#FFFFFF" width="1.5"></a-text>
+      <a-text value="30" position="0 -0.55 0.03" align="center" color="#FFEB3B" width="2" font="roboto"></a-text>
+    </a-entity>
+
+    <!-- 표지판 (우측) -->
+    <a-entity position="4.5 1.5 -30" rotation="0 180 0">
+      <!-- 기둥 -->
+      <a-cylinder position="0 -0.75 0" radius="0.05" height="1.5" color="#757575"></a-cylinder>
+      <!-- 표지판 판넬 -->
+      <a-box position="0 0 0" width="0.8" height="1" depth="0.05" color="#4CAF50" material="emissive: #4CAF50; emissiveIntensity: 0.2"></a-box>
+      <!-- 어린이 그림 영역 (흰색) -->
+      <a-circle position="0 0.25 0.03" radius="0.25" color="#FFFFFF"></a-circle>
+      <!-- 어린이 아이콘 -->
+      <a-sphere position="0 0.35 0.04" radius="0.08" color="#FF6B6B"></a-sphere>
+      <a-box position="0 0.2 0.04" width="0.1" height="0.15" depth="0.05" color="#1565C0"></a-box>
+      <!-- 텍스트 -->
+      <a-text value="어린이
+보호구역" position="0 -0.3 0.03" align="center" color="#FFFFFF" width="1.5"></a-text>
+      <a-text value="30" position="0 -0.55 0.03" align="center" color="#FFEB3B" width="2"></a-text>
+    </a-entity>
+
+    <!-- 도로 바닥 표시 (30 km/h 제한) -->
+    <a-text value="30" position="0 0.02 -10" rotation="-90 0 0" align="center" color="#FFEB3B" width="8"></a-text>
+    <a-text value="🚸" position="0 0.02 -12" rotation="-90 0 0" align="center" color="#FFFFFF" width="6"></a-text>
+
+    <!-- ========== 뒤쪽 환경 (360도 지원) ========== -->
+    <!-- 뒤쪽 도로 연장 -->
+    <a-plane position="0 0 75"
+             rotation="-90 0 0"
+             width="6"
+             height="150"
+             material="src: #asphalt-color; 
+                       normalMap: #asphalt-normal; 
+                       roughnessMap: #asphalt-roughness; 
+                       repeat: 3 75; 
+                       roughness: 0.9; 
+                       metalness: 0.1;
+                       generateMipmaps: false;
+                       minFilter: linear">
+    </a-plane>
+
+    <!-- 뒤쪽 중앙선 -->
+    <a-box position="0 0.01 5" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 10" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 15" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 25" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 35" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 45" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+    <a-box position="0 0.01 55" width="0.15" height="0.02" depth="2" color="#FFD700"></a-box>
+
+    <!-- 뒤쪽 가장자리선 -->
+    <a-box position="-3 0.01 75" width="0.1" height="0.02" depth="150" color="#FFFFFF"></a-box>
+    <a-box position="3 0.01 75" width="0.1" height="0.02" depth="150" color="#FFFFFF"></a-box>
+
+    <!-- 뒤쪽 인도 -->
+    <a-plane position="-4 0.03 75"
+             rotation="-90 0 0"
+             width="2"
+             height="150"
+             color="#B0B0B0"
+             material="roughness: 0.8">
+    </a-plane>
+    <a-plane position="4 0.03 75"
+             rotation="-90 0 0"
+             width="2"
+             height="150"
+             color="#B0B0B0"
+             material="roughness: 0.8">
+    </a-plane>
+
+    <!-- 뒤쪽 인도 블록 패턴 -->
+    <a-box position="-3.5 0.04 75" width="0.05" height="0.01" depth="150" color="#999999"></a-box>
+    <a-box position="-4.5 0.04 75" width="0.05" height="0.01" depth="150" color="#999999"></a-box>
+    <a-box position="3.5 0.04 75" width="0.05" height="0.01" depth="150" color="#999999"></a-box>
+    <a-box position="4.5 0.04 75" width="0.05" height="0.01" depth="150" color="#999999"></a-box>
+
+    <!-- 뒤쪽 건물 (좌측) -->
+    <a-entity position="-6.5 0 20">
+      <a-box position="0 2.5 0" width="3" height="5" depth="5" color="#A1887F" material="roughness: 0.8"></a-box>
+      <a-box position="1.6 3.5 0" width="0.1" height="1" depth="3" color="#4CAF50" material="emissive: #4CAF50; emissiveIntensity: 0.2"></a-box>
+      <a-box position="1.45 2 0" width="0.05" height="1.2" depth="1.5" color="#4A90E2" material="opacity: 0.6; transparent: true"></a-box>
+    </a-entity>
+
+    <a-entity position="-6.5 0 40">
+      <a-box position="0 3 0" width="3" height="6" depth="4" color="#BCAAA4" material="roughness: 0.8"></a-box>
+      <a-box position="1.6 4 0" width="0.1" height="0.8" depth="2.5" color="#FF5722" material="emissive: #FF5722; emissiveIntensity: 0.3"></a-box>
+    </a-entity>
+
+    <a-entity position="-7 0 60">
+      <a-box position="0 4 0" width="4" height="8" depth="6" color="#795548" material="roughness: 0.7"></a-box>
+      <a-box position="2.05 5 0" width="0.1" height="1.5" depth="5" color="#BDBDBD" material="opacity: 0.3; transparent: true"></a-box>
+    </a-entity>
+
+    <a-entity position="-6.5 0 85">
+      <a-box position="0 2.5 0" width="3" height="5" depth="5" color="#D7CCC8" material="roughness: 0.8"></a-box>
+      <a-box position="1.6 3.5 0" width="0.1" height="1" depth="3" color="#2196F3" material="emissive: #2196F3; emissiveIntensity: 0.2"></a-box>
+    </a-entity>
+
+    <!-- 뒤쪽 건물 (우측) -->
+    <a-entity position="6.5 0 25">
+      <a-box position="0 3.5 0" width="3.5" height="7" depth="4" color="#607D8B" material="roughness: 0.5; metalness: 0.3"></a-box>
+      <a-box position="-1.8 5 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+    </a-entity>
+
+    <a-entity position="6.5 0 50">
+      <a-box position="0 2 0" width="3" height="4" depth="5" color="#4CAF50" material="roughness: 0.6"></a-box>
+      <a-box position="-1.6 3 0" width="0.15" height="1.5" depth="4" color="#8BC34A" material="emissive: #8BC34A; emissiveIntensity: 0.4"></a-box>
+    </a-entity>
+
+    <a-entity position="6.5 0 75">
+      <a-box position="0 3.5 0" width="3.5" height="7" depth="4" color="#455A64" material="roughness: 0.5; metalness: 0.3"></a-box>
+      <a-box position="-1.8 5 0" width="0.05" height="0.6" depth="0.6" color="#90CAF9" material="opacity: 0.7; transparent: true"></a-box>
+    </a-entity>
+
+    <a-entity position="6.5 0 100">
+      <a-box position="0 2.5 0" width="3" height="5" depth="5" color="#9E9D24" material="roughness: 0.8"></a-box>
+      <a-box position="-1.6 3.5 0" width="0.1" height="1" depth="3" color="#FFEB3B" material="emissive: #FFEB3B; emissiveIntensity: 0.2"></a-box>
+    </a-entity>
+
+    <!-- 뒤쪽 나무들 -->
+    <a-cylinder position="-4.5 0.5 15" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 15" radius="0.6" color="#388E3C" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="4.5 0.5 30" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="4.5 1.3 30" radius="0.6" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="-4.5 0.5 55" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 55" radius="0.6" color="#66BB6A" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="4.5 0.5 70" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="4.5 1.3 70" radius="0.6" color="#388E3C" material="roughness: 0.9"></a-sphere>
+
+    <a-cylinder position="-4.5 0.5 95" radius="0.15" height="1" color="#6D4C41" material="roughness: 1"></a-cylinder>
+    <a-sphere position="-4.5 1.3 95" radius="0.6" color="#4CAF50" material="roughness: 0.9"></a-sphere>
+
+    <!-- 뒤쪽 가로등 -->
+    <a-entity position="-3 0 35">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <a-entity position="3 0 65">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <a-entity position="-3 0 90">
+      <a-cylinder position="0 2 0" radius="0.08" height="4" color="#424242"></a-cylinder>
+      <a-sphere position="0 4.2 0" radius="0.25" color="#FFF9C4" material="emissive: #FFF59D; emissiveIntensity: 0.6"></a-sphere>
+      <a-light type="point" position="0 4.2 0" intensity="0.3" distance="8" color="#FFF9C4"></a-light>
+    </a-entity>
+
+    <!-- 뒤쪽 주차 차량은 game.js에서 동적으로 생성됩니다. -->
+
+    <!-- 장애물 컨테이너 (동적으로 생성됨) -->
+    <a-entity id="obstacles"></a-entity>
+
+    <!-- 조명 -->
+    <a-light type="ambient" color="#C0C0C0" intensity="0.6"></a-light>
+    <a-light type="directional"
+             position="5 10 2"
+             intensity="0.7"
+             color="#FFFACD"
+             castShadow="true">
+    </a-light>
+    <!-- 보조 조명 (그림자 부드럽게) -->
+    <a-light type="hemisphere" groundColor="#888" intensity="0.3"></a-light>
+
+    <!-- 하늘 -->
+    <a-sky color="#87CEEB"></a-sky>
+  </a-scene>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+
+  <!-- 'P' 키로 카메라 위치/회전 로깅하는 스크립트 -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.addEventListener('keydown', function(e) {
+        if (e.code === 'KeyP') {
+          const cameraEl = document.getElementById('main-camera');
+          if (!cameraEl) return;
+
+          const worldPos = new THREE.Vector3();
+          const worldRot = new THREE.Quaternion();
+          
+          // A-Frame object3D를 통해 월드 좌표계 값 가져오기
+          cameraEl.object3D.getWorldPosition(worldPos);
+          cameraEl.object3D.getWorldQuaternion(worldRot);
+
+          // Quaternion을 사람이 읽기 쉬운 Euler 각도(degree)로 변환
+          const euler = new THREE.Euler().setFromQuaternion(worldRot, 'YXZ');
+          const degrees = {
+              x: THREE.MathUtils.radToDeg(euler.x),
+              y: THREE.MathUtils.radToDeg(euler.y),
+              z: THREE.MathUtils.radToDeg(euler.z)
+          };
+
+          console.clear(); // 이전 로그를 지워 깔끔하게 표시
+          console.log("===== 📸 카메라 위치/회전 (P 키) =====");
+          console.log(`포지션: x: ${worldPos.x.toFixed(3)}, y: ${worldPos.y.toFixed(3)}, z: ${worldPos.z.toFixed(3)}`);
+          console.log(`회전: x: ${degrees.x.toFixed(3)}, y: ${degrees.y.toFixed(3)}, z: ${degrees.z.toFixed(3)}`);
+          console.log("========================================");
+          console.log("위 좌표를 복사해서 알려주세요!");
+        }
+      });
+    });
+  </script>
+
+  <!-- 게임 로직 스크립트 -->
+  <script src="js/physics.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.44.4/dist/umd/supabase.min.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
