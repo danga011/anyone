@@ -119,7 +119,7 @@
   <a-scene renderer="colorManagement: true; physicallyCorrectLights: true"
            keyboard-shortcuts="enterVR: false">
     <!-- 에셋 -->
-    <a-assets timeout="10000">
+    <a-assets timeout="20000">
       <!-- 도로 텍스처 -->
       <img id="asphalt-color" src="assets/textures/Asphalt021_2K_Color.jpg" crossorigin="anonymous">
       <img id="asphalt-normal" src="assets/textures/Asphalt021_2K_NormalGL.jpg" crossorigin="anonymous">
@@ -473,14 +473,12 @@
              rotation="-90 0 0"
              width="6"
              height="200"
-             material="src: #asphalt-color; 
-                       normalMap: #asphalt-normal; 
-                       roughnessMap: #asphalt-roughness; 
-                       repeat: 3 100; 
-                       roughness: 0.9; 
-                       metalness: 0.1;
-                       generateMipmaps: false;
-                       minFilter: linear">
+             material="src: #asphalt-color;
+                       normalMap: #asphalt-normal;
+                       roughnessMap: #asphalt-roughness;
+                       repeat: 3 100;
+                       roughness: 0.9;
+                       metalness: 0.1">
     </a-plane>
 
     <!-- 중앙선 (점선) - 확장 -->
@@ -848,14 +846,12 @@
              rotation="-90 0 0"
              width="6"
              height="150"
-             material="src: #asphalt-color; 
-                       normalMap: #asphalt-normal; 
-                       roughnessMap: #asphalt-roughness; 
-                       repeat: 3 75; 
-                       roughness: 0.9; 
-                       metalness: 0.1;
-                       generateMipmaps: false;
-                       minFilter: linear">
+             material="src: #asphalt-color;
+                       normalMap: #asphalt-normal;
+                       roughnessMap: #asphalt-roughness;
+                       repeat: 3 75;
+                       roughness: 0.9;
+                       metalness: 0.1">
     </a-plane>
 
     <!-- 뒤쪽 중앙선 -->
