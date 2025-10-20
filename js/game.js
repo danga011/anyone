@@ -9,6 +9,7 @@ class TrafficSafetyGame {
     this.isBraking = false;
     this.gameStarted = false;
     this.playerName = '플레이어';
+    this.playerClass = '';
     this.collisionAnimPlayed = false;
     this.noBrakePenalty = false;
 
@@ -229,9 +230,10 @@ class TrafficSafetyGame {
     // 주차된 차량 생성
     this.spawnParkedCars();
 
-    // UI 업데이트
-    window.uiManager.startGame();
-    this.playerName = window.uiManager.getCurrentPlayerName();
+    // UI 업데이트 및 플레이어 정보
+    const profile = window.uiManager.startGame() || {};
+    this.playerName = profile.name || window.uiManager.getCurrentPlayerName();
+    this.playerClass = profile.className || window.uiManager.getCurrentClassName();
 
     // 게임 루프 시작
     this.gameStartTime = performance.now();
@@ -753,7 +755,8 @@ class TrafficSafetyGame {
       collision: this.collisionHappened,
       noBrake,
       safetyScore: safetyScore,
-      playerName: this.playerName
+      playerName: this.playerName,
+      playerClass: this.playerClass
     };
 
     console.log('📊 게임 결과:', gameData);

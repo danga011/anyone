@@ -4,6 +4,7 @@
 
 const SCOREBOARD_KEY = 'trafficSafetyVR.scoreboard';
 const PLAYER_NAME_KEY = 'trafficSafetyVR.playerName';
+const CLASS_NAME_KEY = 'trafficSafetyVR.className';
 const SCOREBOARD_MAX_HISTORY = 50;
 
 class UIManager {
@@ -19,6 +20,11 @@ class UIManager {
     this.currentPlayerName = this.loadStoredPlayerName();
     if (this.playerNameInput && this.currentPlayerName) {
       this.playerNameInput.value = this.currentPlayerName;
+    }
+    this.classNameInput = document.getElementById('class-name');
+    this.currentClassName = this.loadStoredClassName();
+    if (this.classNameInput && this.currentClassName) {
+      this.classNameInput.value = this.currentClassName;
     }
 
     // Bootstrap 모달 인스턴스 생성
@@ -50,7 +56,7 @@ class UIManager {
   startGame() {
     this.startModal.hide();
     this.hud.style.display = 'block';
-    this.preparePlayerName();
+    return this.preparePlayerProfile();
   }
 
   loadStoredPlayerName() {
@@ -61,7 +67,15 @@ class UIManager {
     }
   }
 
-  preparePlayerName() {
+  loadStoredClassName() {
+    try {
+      return localStorage.getItem(CLASS_NAME_KEY) || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  preparePlayerProfile() {
     let name = this.playerNameInput ? this.playerNameInput.value.trim() : '';
     if (!name) {
       name = '플레이어';
@@ -72,11 +86,24 @@ class UIManager {
     } catch (e) {
       console.warn('이름 저장에 실패했습니다.', e);
     }
-    return name;
+
+    let className = this.classNameInput ? this.classNameInput.value.trim() : '';
+    this.currentClassName = className;
+    try {
+      localStorage.setItem(CLASS_NAME_KEY, className);
+    } catch (e) {
+      console.warn('반 이름 저장에 실패했습니다.', e);
+    }
+
+    return { name, className };
   }
 
   getCurrentPlayerName() {
     return this.currentPlayerName || '플레이어';
+  }
+
+  getCurrentClassName() {
+    return this.currentClassName || '';
   }
 
   escapeHtml(value) {
@@ -165,6 +192,10 @@ class UIManager {
     const safetyScore = gameData.safetyScore;
 
     const playerName = this.escapeHtml(gameData.playerName || this.getCurrentPlayerName());
+    const playerClass = this.escapeHtml(gameData.playerClass || this.getCurrentClassName());
+    const classBadge = playerClass
+      ? `<span class="badge bg-secondary ms-2">${playerClass}</span>`
+      : '';
 
     const scoreColor = (safetyScore.collision || gameData.noBrake)
       ? 'text-danger'
@@ -194,7 +225,7 @@ class UIManager {
     const finalGapBadge = makeGapBadge(gameData.finalClearance);
     let html = `
       <div class="card text-center mb-3">
-        <div class="card-header fs-5">📊 ${playerName}님의 종합 평가</div>
+        <div class="card-header fs-5">📊 ${playerName}님의 종합 평가${classBadge}</div>
         <div class="card-body">
           <h2 class="card-title ${scoreColor} display-4 fw-bold">${safetyScore.score}점</h2>
           <p class="card-text fs-5"><strong>${safetyScore.grade}</strong></p>
@@ -284,6 +315,8 @@ class UIManager {
     const safetyScore = gameData.safetyScore || {};
     const rawName = (gameData.playerName || this.getCurrentPlayerName() || '').toString();
     const safeName = rawName.trim().slice(0, 24) || '플레이어';
+    const rawClass = (gameData.playerClass || this.getCurrentClassName() || '').toString();
+    const safeClass = rawClass.trim().slice(0, 40);
 
     return {
       name: safeName,
@@ -291,6 +324,7 @@ class UIManager {
       grade: safetyScore.grade || '',
       reactionTime: typeof gameData.reactionTime === 'number' ? gameData.reactionTime : null,
       finalClearance: typeof gameData.finalClearance === 'number' ? gameData.finalClearance : null,
+      className: safeClass,
       timestamp: Date.now()
     };
   }
@@ -299,7 +333,11 @@ class UIManager {
     try {
       const raw = localStorage.getItem(SCOREBOARD_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((entry) => ({
+        ...entry,
+        className: typeof entry.className === 'string' ? entry.className : ''
+      }));
     } catch (error) {
       console.warn('로컬 리더보드 로딩 실패:', error);
       return [];
@@ -340,7 +378,7 @@ class UIManager {
       try {
         const { data, error } = await window.supabaseClient
           .from('scores')
-          .select('player_name, score, reaction_time, final_clearance, created_at')
+          .select('player_name, class_name, score, reaction_time, final_clearance, created_at')
           .order('score', { ascending: false })
           .order('reaction_time', { ascending: true, nullsFirst: false })
           .order('created_at', { ascending: true })
@@ -358,6 +396,7 @@ class UIManager {
           finalClearance: typeof row.final_clearance === 'number'
             ? row.final_clearance
             : (row.final_clearance !== null ? Number(row.final_clearance) : null),
+          className: typeof row.class_name === 'string' ? row.class_name : '',
           timestamp: row.created_at || null
         }));
       } catch (error) {
@@ -384,7 +423,8 @@ class UIManager {
             player_name: record.name,
             score: record.score,
             reaction_time: record.reactionTime,
-            final_clearance: record.finalClearance
+            final_clearance: record.finalClearance,
+            class_name: record.className || null
           });
 
         if (error) throw error;
@@ -419,7 +459,10 @@ class UIManager {
       topRow.className = 'd-flex justify-content-between align-items-center';
       const nameSpan = document.createElement('span');
       nameSpan.className = 'fw-semibold';
-      nameSpan.textContent = record.name;
+      const displayName = record.className
+        ? `${record.name} (${record.className})`
+        : record.name;
+      nameSpan.textContent = displayName;
       const scoreSpan = document.createElement('span');
       scoreSpan.className = 'fw-bold';
       scoreSpan.textContent = `${record.score}점`;
