@@ -6,8 +6,8 @@
 /* eslint-disable no-undef */
 (function initializeSupabase() {
   const defaultConfig = {
-    url: 'https://YOUR-PROJECT.supabase.co',
-    anonKey: 'YOUR-ANON-KEY'
+    url: 'https://sobwhxlerpogkhgpzylq.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNvYndoeGxlcnBvZ2toZ3B6eWxxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4ODg1NjAsImV4cCI6MjA3NjQ2NDU2MH0.9gPBKk_apNUAmy72yuFCeYbzMPpGYJTNyvA-ud_mU20'
   };
 
   const externalConfig = window.__SUPABASE_CONFIG__ || {};
