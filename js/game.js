@@ -52,9 +52,13 @@ class TrafficSafetyGame {
     this.randomDelay = this.getRandomDelay();
 
     // DOM 엘리먼트
+    this.sceneEl = document.querySelector('a-scene');
     this.cameraRig = document.getElementById('camera-rig');
     this.obstaclesContainer = document.getElementById('obstacles');
     this.parkedCarsContainer = null; // 주차된 차량 컨테이너
+
+    // 디바이스 정보
+    this.isMobileDevice = !!(window.AFRAME && AFRAME.utils && AFRAME.utils.device && AFRAME.utils.device.isMobile());
 
     // 차량/장애물 치수 (거리 계산 및 충돌 판정을 위한 기준값)
     this.vehicleFrontLength = 2.25; // 차량 중심에서 앞범퍼까지 거리
@@ -69,8 +73,23 @@ class TrafficSafetyGame {
     this.collisionAnimPlayed = false;
     this.noBrakePenalty = false;
 
+    // 디바이스 성능 설정
+    this.applyDevicePerformanceSettings();
+
     // 이벤트 바인딩
     this.bindEvents();
+  }
+
+  /**
+   * 모바일 환경에서 렌더링 부담을 줄이기 위한 설정
+   */
+  applyDevicePerformanceSettings() {
+    if (!this.sceneEl || !this.isMobileDevice) {
+      return;
+    }
+    const rendererSettings = 'colorManagement: true; physicallyCorrectLights: true; antialias: false; precision: mediump; powerPreference: low-power';
+    this.sceneEl.setAttribute('renderer', rendererSettings);
+    console.log('⚙️ 모바일 최적화 렌더러 설정 적용:', rendererSettings);
   }
 
   /**
@@ -245,23 +264,16 @@ class TrafficSafetyGame {
    * 주차된 차량을 동적으로 생성
    */
   spawnParkedCars() {
-    const scene = document.querySelector('a-scene');
+    const scene = this.sceneEl || document.querySelector('a-scene');
+    if (!scene) {
+      console.warn('⚠️ 씬을 찾을 수 없어 주차 차량을 생성하지 못했습니다.');
+      return;
+    }
     this.parkedCarsContainer = document.createElement('a-entity');
     this.parkedCarsContainer.id = 'parked-cars';
     scene.appendChild(this.parkedCarsContainer);
 
-    const carSpots = [
-      // 좌측
-      { x: -2.2, z: -8 }, { x: -2.2, z: -15 }, { x: -2.2, z: -22 },
-      { x: -2.2, z: -35 }, { x: -2.2, z: -50 }, { x: -2.2, z: -65 },
-      { x: -2.2, z: -80 }, { x: -2.2, z: -95 }, { x: -2.2, z: -110 },
-      // 우측
-      { x: 2.2, z: -10 }, { x: 2.2, z: -18 }, { x: 2.2, z: -28 },
-      { x: 2.2, z: -40 }, { x: 2.2, z: -55 }, { x: 2.2, z: -70 },
-      { x: 2.2, z: -85 }, { x: 2.2, z: -100 }, { x: 2.2, z: -115 },
-      // 뒤쪽
-      { x: -2.2, z: 30 }, { x: 2.2, z: 45 }, { x: -2.2, z: 68 }, { x: 2.2, z: 92 }
-    ];
+    const carSpots = this.getParkedCarSpots();
 
     carSpots.forEach(spot => {
       const carEntity = document.createElement('a-entity');
@@ -279,7 +291,31 @@ class TrafficSafetyGame {
 
       this.parkedCarsContainer.appendChild(carEntity);
     });
-    console.log(`✅ ${carSpots.length}대의 주차 차량을 동적으로 생성했습니다.`);
+    console.log(`✅ ${carSpots.length}대의 주차 차량을 동적으로 생성했습니다.${this.isMobileDevice ? ' (모바일 최적화 적용)' : ''}`);
+  }
+
+  /**
+   * 주차 차량 위치 (모바일은 절반만 생성해 부하 감소)
+   */
+  getParkedCarSpots() {
+    const baseSpots = [
+      // 좌측
+      { x: -2.2, z: -8 }, { x: -2.2, z: -15 }, { x: -2.2, z: -22 },
+      { x: -2.2, z: -35 }, { x: -2.2, z: -50 }, { x: -2.2, z: -65 },
+      { x: -2.2, z: -80 }, { x: -2.2, z: -95 }, { x: -2.2, z: -110 },
+      // 우측
+      { x: 2.2, z: -10 }, { x: 2.2, z: -18 }, { x: 2.2, z: -28 },
+      { x: 2.2, z: -40 }, { x: 2.2, z: -55 }, { x: 2.2, z: -70 },
+      { x: 2.2, z: -85 }, { x: 2.2, z: -100 }, { x: 2.2, z: -115 },
+      // 뒤쪽
+      { x: -2.2, z: 30 }, { x: 2.2, z: 45 }, { x: -2.2, z: 68 }, { x: 2.2, z: 92 }
+    ];
+
+    if (!this.isMobileDevice) {
+      return baseSpots;
+    }
+
+    return baseSpots.filter((_, index) => index % 2 === 0);
   }
 
   /**
