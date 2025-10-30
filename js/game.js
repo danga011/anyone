@@ -87,9 +87,16 @@ class TrafficSafetyGame {
     if (!this.sceneEl || !this.isMobileDevice) {
       return;
     }
-    const rendererSettings = 'colorManagement: true; physicallyCorrectLights: true; antialias: false; precision: mediump; powerPreference: low-power';
+    const rendererSettings = [
+      'colorManagement: true',
+      'physicallyCorrectLights: true',
+      'antialias: false',
+      'precision: highp',
+      'powerPreference: high-performance',
+      'foveationLevel: 0'
+    ].join('; ');
     this.sceneEl.setAttribute('renderer', rendererSettings);
-    console.log('⚙️ 모바일 최적화 렌더러 설정 적용:', rendererSettings);
+    console.log('⚙️ 모바일 VR 친화 렌더러 설정 적용:', rendererSettings);
   }
 
   /**
@@ -330,10 +337,10 @@ class TrafficSafetyGame {
   }
 
   /**
-   * 랜덤 장애물 등장 시간 (2-5초)
+   * 랜덤 장애물 등장 시간 (3-10초)
    */
   getRandomDelay() {
-    return 2000 + Math.random() * 3000;
+    return 3000 + Math.random() * 7000;
   }
 
   /**
@@ -840,6 +847,10 @@ class TrafficSafetyGame {
     this.cameraRig.setAttribute('position', '0 1.8 0');
     this.cameraRig.setAttribute('rotation', '0 0 0');
     this.resetDriverView();
+
+    // 실행 상태 리셋
+    this.isRunning = false;
+    this.gameStarted = false;
 
     // UI 초기화
     window.uiManager.reset();

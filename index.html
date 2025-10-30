@@ -4,6 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>교통안전 VR 운전 체험</title>
+  <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@2.4.0/build/webxr-polyfill.min.js"></script>
+  <script>
+    if (typeof WebXRPolyfill === 'function') {
+      try {
+        new WebXRPolyfill({ allowCardboardOnDesktop: false });
+        console.log('📱 WebXR polyfill initialized for fallback VR support.');
+      } catch (err) {
+        console.warn('WebXR polyfill initialization failed:', err);
+      }
+    }
+  </script>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
   <!-- Bootstrap CSS -->
@@ -38,11 +49,48 @@
       display: none;
       pointer-events: all;
     }
+    #mobile-vr-ui {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: none;
+      pointer-events: all;
+      z-index: 1100;
+      text-align: right;
+    }
+    #mobile-vr-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    #mobile-vr-message {
+      margin-top: 8px;
+      display: none;
+      pointer-events: none;
+    }
+    body.vr-presenting #ui-overlay {
+      pointer-events: none;
+    }
+    body.vr-presenting #mobile-vr-message {
+      display: none;
+    }
   </style>
 </head>
 <body>
   <!-- UI Overlay -->
   <div id="ui-overlay">
+    <div id="mobile-vr-ui">
+      <button type="button" id="mobile-vr-btn" class="btn btn-warning btn-sm shadow-sm">
+        <span>🎧 VR 보기</span>
+      </button>
+      <button type="button" id="mobile-vr-start-btn" class="btn btn-success btn-sm shadow-sm mt-2">
+        <span>🚗 VR에서 바로 시작</span>
+      </button>
+      <div id="mobile-vr-message" class="alert alert-dark text-white small py-2 px-3 shadow-sm mt-2">
+        iOS Safari에서는 완전한 WebXR VR을 지원하지 않아요. 버튼을 눌러 카드보드 모드를 시도해 보세요.
+      </div>
+    </div>
+
     <!-- HUD -->
     <div id="hud" class="card bg-dark text-white bg-opacity-75">
       <div class="card-body">
@@ -122,7 +170,9 @@
 
   <!-- A-Frame Scene -->
   <a-scene renderer="colorManagement: true; physicallyCorrectLights: true"
-           keyboard-shortcuts="enterVR: false">
+           keyboard-shortcuts="enterVR: false"
+           webxr="optionalFeatures: dom-overlay,local-floor; overlayElement: #ui-overlay"
+           device-orientation-permission-ui="enabled: true; deviceMotionMessage: VR 모드를 사용하려면 기기의 방향 센서 접근을 허용해주세요.; allowButtonText: 허용; denyButtonText: 나중에">
     <!-- 에셋 -->
     <a-assets timeout="20000">
       <!-- 도로 텍스처 -->
@@ -1034,6 +1084,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.44.4/dist/umd/supabase.min.js"></script>
   <script src="js/supabase-client.js"></script>
   <script src="js/ui.js"></script>
+  <script src="js/vr-helper.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>
