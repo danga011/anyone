@@ -26,6 +26,16 @@ class UIManager {
     if (this.classNameInput && this.currentClassName) {
       this.classNameInput.value = this.currentClassName;
     }
+    this.startButton = document.getElementById('start-btn');
+    this.restartButton = document.getElementById('restart-btn');
+    this.vrResultPanel = document.getElementById('vr-result-panel');
+    this.vrResultTitle = document.getElementById('vr-result-title');
+    this.vrResultScore = document.getElementById('vr-result-score');
+    this.vrResultReaction = document.getElementById('vr-result-reaction');
+    this.vrResultGap = document.getElementById('vr-result-gap');
+    this.vrResultMessage = document.getElementById('vr-result-message');
+    this.vrResultTip = document.getElementById('vr-result-tip');
+    this.lastVrResultData = null;
 
     // Bootstrap 모달 인스턴스 생성
     this.startScreenEl = document.getElementById('start-screen');
@@ -33,6 +43,12 @@ class UIManager {
 
     this.resultScreenEl = document.getElementById('result-screen');
     this.resultModal = new bootstrap.Modal(this.resultScreenEl);
+
+    this.sceneEl = document.querySelector('a-scene');
+    if (this.sceneEl) {
+      this.sceneEl.addEventListener('enter-vr', () => this.applyVrResultVisibility());
+      this.sceneEl.addEventListener('exit-vr', () => this.hideVrResultPanel());
+    }
   }
 
   /**
@@ -56,7 +72,16 @@ class UIManager {
   startGame() {
     this.startModal.hide();
     this.hud.style.display = 'block';
+    this.clearVrResultPanel();
     return this.preparePlayerProfile();
+  }
+
+  isStartScreenVisible() {
+    return this.startScreenEl && this.startScreenEl.classList.contains('show');
+  }
+
+  isResultScreenVisible() {
+    return this.resultScreenEl && this.resultScreenEl.classList.contains('show');
   }
 
   loadStoredPlayerName() {
@@ -114,6 +139,85 @@ class UIManager {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  sanitizeVrText(value, maxLength = 80) {
+    if (!value) return '';
+    return value.toString().replace(/\s+/g, ' ').trim().slice(0, maxLength);
+  }
+
+  formatClearanceText(value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return '-';
+    }
+    const absValue = Math.abs(value).toFixed(2);
+    return value >= 0 ? `${value.toFixed(2)} m` : `부족 ${absValue} m`;
+  }
+
+  updateVrResultPanel(gameData = {}) {
+    this.lastVrResultData = gameData;
+    if (!this.vrResultPanel) {
+      return;
+    }
+
+    const safetyScore = gameData.safetyScore || {};
+    const playerName = this.sanitizeVrText(gameData.playerName || this.getCurrentPlayerName() || '플레이어', 32);
+    const className = this.sanitizeVrText(gameData.playerClass || this.getCurrentClassName() || '', 32);
+    const title = className ? `${playerName} (${className})` : playerName;
+    const scoreText = `${safetyScore.score ?? 0}점 · ${(safetyScore.grade || '').trim() || '평가중'}`;
+
+    let reactionLabel = '반응 미측정';
+    if (gameData.reactionTime === -1) {
+      reactionLabel = '실격 (너무 빠름)';
+    } else if (typeof gameData.reactionTime === 'number') {
+      reactionLabel = `${gameData.reactionTime.toFixed(2)}초`;
+    }
+    const speedLabel = typeof gameData.speed === 'number'
+      ? `${gameData.speed.toFixed(1)} km/h`
+      : '- km/h';
+    const reactionLine = `반응 ${reactionLabel} | 속도 ${speedLabel}`;
+
+    const finalClearance = (typeof gameData.finalClearance === 'number' && !Number.isNaN(gameData.finalClearance))
+      ? gameData.finalClearance
+      : null;
+    const stoppingDistance = (typeof gameData.stoppingDistance === 'number' && !Number.isNaN(gameData.stoppingDistance))
+      ? gameData.stoppingDistance
+      : null;
+    const gapLine = `여유 ${this.formatClearanceText(finalClearance)} | 필요 ${this.formatClearanceText(stoppingDistance)}`;
+    const warningNeeded = gameData.noBrake || safetyScore.collision || gameData.reactionTime === -1 || (finalClearance !== null && finalClearance < 0);
+    const messageLine = warningNeeded
+      ? '⚠️ 위험! 주변을 더 살피고 즉시 감속하세요.'
+      : (this.sanitizeVrText(safetyScore.message || '잘했어요! 안전 운전을 계속하세요.', 64) || '안전 운전을 유지하세요.');
+    const tipLine = 'START=다시 시작 · A/트리거=브레이크';
+
+    if (this.vrResultTitle) this.vrResultTitle.setAttribute('value', title);
+    if (this.vrResultScore) this.vrResultScore.setAttribute('value', scoreText);
+    if (this.vrResultReaction) this.vrResultReaction.setAttribute('value', reactionLine);
+    if (this.vrResultGap) this.vrResultGap.setAttribute('value', gapLine);
+    if (this.vrResultMessage) this.vrResultMessage.setAttribute('value', messageLine);
+    if (this.vrResultTip) this.vrResultTip.setAttribute('value', tipLine);
+
+    this.applyVrResultVisibility();
+  }
+
+  applyVrResultVisibility() {
+    if (!this.vrResultPanel) {
+      return;
+    }
+    const isPresenting = document.body.classList.contains('vr-presenting');
+    const shouldShow = Boolean(isPresenting && this.lastVrResultData);
+    this.vrResultPanel.setAttribute('visible', shouldShow ? 'true' : 'false');
+  }
+
+  hideVrResultPanel() {
+    if (this.vrResultPanel) {
+      this.vrResultPanel.setAttribute('visible', 'false');
+    }
+  }
+
+  clearVrResultPanel() {
+    this.lastVrResultData = null;
+    this.hideVrResultPanel();
   }
 
   /**
@@ -185,6 +289,14 @@ class UIManager {
           </p>
         </div>
       `;
+      this.updateVrResultPanel({
+        ...gameData,
+        safetyScore: {
+          score: 0,
+          grade: '실격',
+          message: '어린이가 나타나기 전에 브레이크를 밟았어요.'
+        }
+      });
       this.resultModal.show();
       return;
     }
@@ -288,6 +400,7 @@ class UIManager {
     // Render existing leaderboard data (local cache) while remote update runs.
     this.renderLeaderboard(this.loadLocalLeaderboard());
     this.resultModal.show();
+    this.updateVrResultPanel(gameData);
 
     this.saveScoreRecord(gameData)
       .then((records) => this.renderLeaderboard(records))
@@ -499,6 +612,7 @@ class UIManager {
    * 게임 리셋
    */
   reset() {
+    this.clearVrResultPanel();
     this.resultModal.hide();
     // 모달이 완전히 사라진 후 시작 모달을 표시
     this.resultScreenEl.addEventListener('hidden.bs.modal', () => {
@@ -512,6 +626,9 @@ window.addEventListener('load', () => {
   // UI 매니저와 게임 로직 인스턴스 생성
   window.uiManager = new UIManager();
   window.game = new TrafficSafetyGame();
+  if (typeof GamepadInputManager === 'function') {
+    window.gamepadManager = new GamepadInputManager(window.game, window.uiManager);
+  }
 
   // 페이지 로드 시 시작 모달 바로 표시
   window.uiManager.showStartScreen();

@@ -74,6 +74,41 @@
     body.vr-presenting #mobile-vr-message {
       display: none;
     }
+    #cardboard-align-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      z-index: 1500;
+      pointer-events: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      color: #fff;
+      text-align: center;
+      padding: 2rem 1rem;
+      background: rgba(0, 0, 0, 0.05);
+    }
+    body.cardboard-mode #cardboard-align-overlay {
+      display: flex;
+    }
+    #cardboard-align-overlay .center-line {
+      width: 4px;
+      height: 70%;
+      background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.8) 20%, rgba(255,255,255,0.8) 80%, rgba(255,255,255,0) 100%);
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+      border-radius: 999px;
+    }
+    #cardboard-align-overlay .hint {
+      margin-top: 1.5rem;
+      font-size: 0.95rem;
+      background: rgba(0, 0, 0, 0.65);
+      padding: 0.75rem 1rem;
+      border-radius: 999px;
+      backdrop-filter: blur(4px);
+    }
   </style>
 </head>
 <body>
@@ -112,6 +147,14 @@
 
     <!-- 브레이크 표시 -->
     <div id="brake-indicator" class="alert alert-danger fs-4 fw-bold">🛑 브레이크!</div>
+  </div>
+
+  <div id="cardboard-align-overlay" aria-hidden="true">
+    <div class="center-line"></div>
+    <div class="hint">
+      두 눈의 화면이 겹쳐 보이지 않으면 헤드셋을 정렬하거나<br>
+      휴대폰을 조금 뒤로 밀어 맞춰주세요.
+    </div>
   </div>
 
   <!-- 시작 화면 Modal -->
@@ -518,6 +561,61 @@
                color="#2A2A2A"
                rotation="10 0 0">
         </a-box>
+
+        <!-- VR 결과 패널 (운전석 HUD) -->
+        <a-entity id="vr-result-panel"
+                  position="0 0.05 -0.9"
+                  rotation="-2 0 0"
+                  visible="false">
+          <a-plane width="1.05"
+                   height="0.85"
+                   color="#050505"
+                   opacity="0.85"
+                   material="side: double; roughness: 0.9"></a-plane>
+          <a-plane width="1.05"
+                   height="0.85"
+                   color="#32CD32"
+                   opacity="0.08"
+                   position="0 0 0.01"></a-plane>
+          <a-entity position="0 0 0.02">
+            <a-text id="vr-result-title"
+                    value=""
+                    color="#FFEB3B"
+                    width="1.9"
+                    align="center"
+                    position="0 0.3 0"></a-text>
+            <a-text id="vr-result-score"
+                    value=""
+                    color="#FFFFFF"
+                    width="1.9"
+                    align="center"
+                    position="0 0.12 0"></a-text>
+            <a-text id="vr-result-reaction"
+                    value=""
+                    color="#80DEEA"
+                    width="1.9"
+                    align="center"
+                    position="0 -0.04 0"></a-text>
+            <a-text id="vr-result-gap"
+                    value=""
+                    color="#FFCDD2"
+                    width="1.9"
+                    align="center"
+                    position="0 -0.2 0"></a-text>
+            <a-text id="vr-result-message"
+                    value=""
+                    color="#FFF59D"
+                    width="1.9"
+                    align="center"
+                    position="0 -0.32 0"></a-text>
+            <a-text id="vr-result-tip"
+                    value=""
+                    color="#C5E1A5"
+                    width="1.9"
+                    align="center"
+                    position="0 -0.44 0"></a-text>
+          </a-entity>
+        </a-entity>
       </a-camera>
     </a-entity>
 

@@ -12,10 +12,13 @@ class MobileVRHelper {
     this.vrButton = document.getElementById('mobile-vr-btn');
     this.vrStartButton = document.getElementById('mobile-vr-start-btn');
     this.messageEl = document.getElementById('mobile-vr-message');
+    this.cardboardOverlay = document.getElementById('cardboard-align-overlay');
 
     this.isIOS = this.detectIOS();
     this.isMobile = this.detectMobile();
-    this.supportsImmersiveVr = false;
+    this.supportsImmersiveVr = null;
+    this.cardboardModeActive = false;
+    this.orientationLocked = false;
 
     if (!this.sceneEl) {
       return;
@@ -90,10 +93,10 @@ class MobileVRHelper {
 
     if (this.isIOS) {
       this.messageEl.classList.add('alert-dark', 'text-white');
-      this.messageEl.textContent = 'iOS Safari에서는 완전한 WebXR VR을 지원하지 않아요. 버튼을 눌러 카드보드 모드를 시도해 보세요.';
+      this.messageEl.textContent = 'iOS Safari에서는 완전한 WebXR VR을 지원하지 않아요. 기기를 가로 모드로 돌린 뒤 카드보드 모드를 시도해 보세요.';
     } else {
       this.messageEl.classList.add('alert-warning', 'text-dark');
-      this.messageEl.textContent = '이 기기는 WebXR VR을 직접 지원하지 않습니다. 최신 Chrome 혹은 전용 헤드셋 사용을 권장합니다.';
+      this.messageEl.textContent = '이 기기는 WebXR VR을 직접 지원하지 않습니다. 화면을 가로로 고정한 뒤 카드보드 모드를 사용하거나 최신 Chrome/전용 헤드셋을 권장합니다.';
     }
   }
 
@@ -103,12 +106,16 @@ class MobileVRHelper {
       if (this.messageEl) {
         this.messageEl.style.display = 'none';
       }
+      const cardboardMode = this.shouldUseCardboardFallback();
+      this.setCardboardModeActive(cardboardMode);
       this.autoStartGame();
     });
 
     this.sceneEl.addEventListener('exit-vr', () => {
       document.body.classList.remove('vr-presenting');
-      if (this.isIOS && this.messageEl) {
+      this.setCardboardModeActive(false);
+      this.unlockOrientation();
+      if (this.messageEl && (!this.supportsImmersiveVr || this.isIOS)) {
         this.messageEl.style.display = 'block';
       }
     });
@@ -123,6 +130,69 @@ class MobileVRHelper {
     } catch (err) {
       console.warn('navigator.xr.isSessionSupported failed:', err);
       return false;
+    }
+  }
+
+  shouldUseCardboardFallback() {
+    return this.isMobile && this.supportsImmersiveVr === false;
+  }
+
+  isLandscape() {
+    if (window.matchMedia) {
+      try {
+        return window.matchMedia('(orientation: landscape)').matches;
+      } catch (err) {
+        return window.innerWidth > window.innerHeight;
+      }
+    }
+    return window.innerWidth > window.innerHeight;
+  }
+
+  async ensureLandscapeOrientation() {
+    if (!this.shouldUseCardboardFallback()) {
+      return true;
+    }
+
+    const orientation = window.screen?.orientation;
+    if (orientation && typeof orientation.lock === 'function') {
+      if (orientation.type && orientation.type.startsWith('landscape')) {
+        return true;
+      }
+      try {
+        await orientation.lock('landscape');
+        this.orientationLocked = true;
+        return true;
+      } catch (err) {
+        console.warn('Orientation lock failed:', err);
+      }
+    }
+
+    return this.isLandscape();
+  }
+
+  unlockOrientation() {
+    if (!this.orientationLocked) {
+      return;
+    }
+    const orientation = window.screen?.orientation;
+    if (orientation && typeof orientation.unlock === 'function') {
+      try {
+        orientation.unlock();
+      } catch (err) {
+        console.warn('Orientation unlock failed:', err);
+      }
+    }
+    this.orientationLocked = false;
+  }
+
+  setCardboardModeActive(active) {
+    if (this.cardboardModeActive === active) {
+      return;
+    }
+    this.cardboardModeActive = active;
+    document.body.classList.toggle('cardboard-mode', active);
+    if (this.cardboardOverlay) {
+      this.cardboardOverlay.setAttribute('aria-hidden', active ? 'false' : 'true');
     }
   }
 
@@ -167,6 +237,8 @@ class MobileVRHelper {
       return false;
     }
 
+    const useCardboardFallback = this.shouldUseCardboardFallback();
+
     if (this.isIOS) {
       const permissionGranted = await this.requestDeviceOrientationPermission();
       if (!permissionGranted) {
@@ -175,12 +247,24 @@ class MobileVRHelper {
       }
     }
 
+    if (useCardboardFallback) {
+      const orientationReady = await this.ensureLandscapeOrientation();
+      if (!orientationReady) {
+        this.showMessage('VR 모드를 사용하려면 기기를 가로 모드로 돌리거나 잠금 해제해 주세요.', true);
+        return false;
+      }
+    }
+
     try {
       await this.sceneEl.enterVR();
-      if (this.isIOS) {
-        this.showMessage('카드보드 모드가 실행되었습니다. 화면을 헤드셋에 장착하고 체험을 진행하세요.', false);
-      } else if (!this.supportsImmersiveVr) {
-        this.showMessage('현재 브라우저에서는 완전한 VR 대신 360도 보기 모드가 제공될 수 있어요.', false);
+      if (useCardboardFallback) {
+        this.setCardboardModeActive(true);
+        this.showMessage('카드보드 모드가 실행되었습니다. 휴대폰을 정확히 중앙에 맞추고 체험을 진행하세요.', false);
+      } else {
+        this.setCardboardModeActive(false);
+        if (!this.supportsImmersiveVr) {
+          this.showMessage('현재 브라우저에서는 완전한 VR 대신 360도 보기 모드가 제공될 수 있어요.', false);
+        }
       }
       if (this.vrButton) {
         this.vrButton.blur();

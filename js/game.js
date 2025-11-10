@@ -215,10 +215,16 @@ class TrafficSafetyGame {
 
     // 모바일 터치 (화면 탭 - 브레이크)
     document.addEventListener('touchstart', (e) => {
-      if (this.isRunning && !this.isBraking) {
-        this.brake();
+      if (!this.isRunning || this.isBraking) {
+        return;
       }
-    });
+      if (!this.isSceneTouch(e)) {
+        return;
+      }
+      // 터치 입력과 브레이크를 1:1 매핑하기 위해 기본 동작을 막음
+      e.preventDefault();
+      this.brake();
+    }, { passive: false });
 
     // VR 컨트롤러 버튼 (선택사항)
     document.addEventListener('selectstart', (e) => {
@@ -226,6 +232,31 @@ class TrafficSafetyGame {
         this.brake();
       }
     });
+  }
+
+  /**
+   * HUD/모달 등 UI 요소를 제외한 터치인지 판별
+   */
+  isSceneTouch(event) {
+    if (!event) return false;
+    let target = event.target;
+    if (!target) return false;
+
+    if (target.nodeType !== 1 && target.parentElement) {
+      target = target.parentElement;
+    }
+
+    if (!target || typeof target.closest !== 'function') {
+      return true;
+    }
+
+    if (target.closest('#ui-overlay') ||
+        target.closest('#cardboard-align-overlay') ||
+        target.closest('.modal.show')) {
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -854,5 +885,134 @@ class TrafficSafetyGame {
 
     // UI 초기화
     window.uiManager.reset();
+  }
+}
+
+class GamepadInputManager {
+  constructor(game, uiManager) {
+    this.game = game;
+    this.uiManager = uiManager;
+    this.enabled = typeof navigator !== 'undefined' && typeof navigator.getGamepads === 'function';
+    this.prevButtonStates = new Map();
+    this.connectedPads = new Set();
+    this.pollHandle = null;
+    this.START_BUTTONS = [9, 3];
+    this.BRAKE_BUTTONS = [0, 1, 2, 7];
+
+    if (!this.enabled) {
+      console.info('🎮 Gamepad API가 지원되지 않습니다. 블루투스 조이스틱 연동이 비활성화됩니다.');
+      return;
+    }
+
+    window.addEventListener('gamepadconnected', (event) => {
+      console.log(`🎮 게임패드 연결됨: ${event.gamepad.id}`);
+      this.connectedPads.add(event.gamepad.index);
+      this.startPolling();
+    });
+
+    window.addEventListener('gamepaddisconnected', (event) => {
+      console.log(`🔌 게임패드 연결 해제: ${event.gamepad.id}`);
+      this.connectedPads.delete(event.gamepad.index);
+      this.prevButtonStates.delete(event.gamepad.index);
+      if (this.connectedPads.size === 0) {
+        this.stopPolling();
+      }
+    });
+
+    // 초기 스캔
+    this.startPolling();
+  }
+
+  startPolling() {
+    if (!this.enabled || this.pollHandle) {
+      return;
+    }
+    this.pollHandle = requestAnimationFrame(() => this.pollLoop());
+  }
+
+  stopPolling() {
+    if (this.pollHandle) {
+      cancelAnimationFrame(this.pollHandle);
+      this.pollHandle = null;
+    }
+  }
+
+  pollLoop() {
+    this.updateState();
+    if (this.shouldContinuePolling()) {
+      this.pollHandle = requestAnimationFrame(() => this.pollLoop());
+    } else {
+      this.pollHandle = null;
+    }
+  }
+
+  shouldContinuePolling() {
+    if (this.connectedPads.size > 0) {
+      return true;
+    }
+    const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+    return pads && Array.from(pads).some(Boolean);
+  }
+
+  updateState() {
+    if (!this.enabled) {
+      return;
+    }
+    const pads = navigator.getGamepads();
+    if (!pads) {
+      return;
+    }
+    Array.from(pads).forEach((pad) => {
+      if (!pad) return;
+      this.connectedPads.add(pad.index);
+      this.scanButtons(pad);
+    });
+  }
+
+  scanButtons(pad) {
+    const prevState = this.prevButtonStates.get(pad.index) || [];
+    pad.buttons.forEach((button, index) => {
+      const isPressed = !!(button && button.pressed);
+      const wasPressed = Boolean(prevState[index]);
+      if (isPressed && !wasPressed) {
+        this.handleButtonPress(index);
+      }
+      prevState[index] = isPressed;
+    });
+    this.prevButtonStates.set(pad.index, prevState);
+  }
+
+  handleButtonPress(index) {
+    if (this.START_BUTTONS.includes(index)) {
+      this.handleStartAction();
+      return;
+    }
+    if (this.BRAKE_BUTTONS.includes(index)) {
+      this.handleBrakeAction();
+    }
+  }
+
+  handleStartAction() {
+    if (this.uiManager?.isStartScreenVisible()) {
+      this.uiManager.startButton?.click();
+      return;
+    }
+    if (this.uiManager?.isResultScreenVisible()) {
+      this.uiManager.restartButton?.click();
+      return;
+    }
+    if (!this.game.isRunning) {
+      if (!this.game.gameStarted) {
+        this.game.start();
+      } else {
+        this.game.restart();
+      }
+    }
+  }
+
+  handleBrakeAction() {
+    if (this.game.isRunning && !this.game.isBraking) {
+      this.game.brake();
+    }
   }
 }
